@@ -18,6 +18,11 @@ const UrlSchema = new mongoose.Schema({
     type: String,
     default: "General",
   },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    sparse: true,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
