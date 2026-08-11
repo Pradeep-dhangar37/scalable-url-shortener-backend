@@ -1,4 +1,5 @@
 import zookeeper from "node-zookeeper-client";
+import logger from "../utils/logger.js";
 
 const PATH = "/kgs-counter";
 const RANGE_SIZE = 10000;
@@ -13,13 +14,23 @@ class ZooKeeperCoordinator {
 
   async connect() {
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("ZooKeeper connection timeout. Please ensure ZooKeeper is installed and running on port 2181. Run 'brew services start zookeeper' to start it."));
+      }, 5000); // 5 seconds connection timeout
+
       this.client.once("connected", () => {
-        console.log("Connected to ZooKeeper");
+        clearTimeout(timeout);
+        logger.success("Connected to ZooKeeper coordinate manager");
         this.isConnected = true;
         this.initializeCounterNode()
           .then(() => this.fetchNextRange())
           .then(resolve)
           .catch(reject);
+      });
+
+      this.client.once("error", (err) => {
+        clearTimeout(timeout);
+        reject(new Error(`ZooKeeper connection error: ${err.message}. Please verify the service is active.`));
       });
 
       this.client.connect();
@@ -49,7 +60,7 @@ class ZooKeeperCoordinator {
                 }
                 return reject(createErr);
               }
-              console.log(`Created node ${path} in ZooKeeper`);
+              logger.success(`Created node ${path} in ZooKeeper`);
               resolve();
             }
           );
@@ -73,14 +84,14 @@ class ZooKeeperCoordinator {
         
         this.currentCounter = currentValue;
         this.maxCounter = newValue;
-        console.log(`Allocated new KGS range: [${this.currentCounter}, ${this.maxCounter})`);
+        logger.info(`Allocated new KGS range: [${this.currentCounter}, ${this.maxCounter})`);
         return;
       } catch (err) {
         if (
           err.code === zookeeper.Exception.BADVERSION ||
           (err.getName && err.getName() === "BADVERSION")
         ) {
-          console.warn("ZooKeeper version mismatch, retrying range allocation...");
+          logger.warn("ZooKeeper version mismatch, retrying range allocation...");
           continue;
         }
         throw err;

@@ -2,16 +2,17 @@ import Url from "../models/Url.js";
 import redisClient from "../config/redis.js";
 import zookeeperCoordinator from "../config/zookeeperCoordinator.js";
 import { encode } from "../utils/base62.js";
+import logger from "../utils/logger.js";
 
 // CREATE SHORT URL
 export const createShortUrl = async (req, res) => {
   try {
-    console.log(" Incoming Request Body:", req.body); // DEBUG
+    logger.info("Incoming Request to shorten URL:", req.body.longUrl);
 
     const { longUrl, customAlias, topic } = req.body;
 
     if (!longUrl) {
-      console.log(" longUrl missing");
+      logger.warn("URL shortening failed: longUrl field is missing");
       return res.status(400).json({ error: "URL required" });
     }
 
@@ -20,6 +21,7 @@ export const createShortUrl = async (req, res) => {
       // Check if alias already exists
       const existing = await Url.findOne({ shortCode: customAlias });
       if (existing) {
+        logger.warn(`URL shortening failed: customAlias '${customAlias}' already in use`);
         return res.status(400).json({ error: "Custom alias already in use" });
       }
       shortCode = customAlias;
@@ -29,23 +31,24 @@ export const createShortUrl = async (req, res) => {
       shortCode = encode(nextId);
     }
 
-    console.log("Selected shortCode:", shortCode);
+    logger.info(`Generated shortCode: ${shortCode}`);
 
     const newUrl = new Url({
       shortCode,
       longUrl,
       topic: topic || "General",
+      userId: req.user ? req.user.userId : undefined,
     });
 
     await newUrl.save();
-    console.log(" Saved to DB");
+    logger.success(`Shortened URL saved to DB: ${shortCode} -> ${longUrl}`);
 
     res.json({
       shortUrl: `${process.env.BASE_URL}/${shortCode}`,
       topic: newUrl.topic,
     });
   } catch (err) {
-    console.log("ERROR in createShortUrl:", err);
+    logger.error("Error in createShortUrl:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
@@ -54,55 +57,55 @@ export const createShortUrl = async (req, res) => {
 export const redirectUrl = async (req, res) => {
   try {
     const { code } = req.params;
-    console.log(" Redirect request for:", code);
+    logger.info(`Redirect request received for code: ${code}`);
 
     // 1. Check Redis Cache
     const cachedUrl = await redisClient.get(code);
     if (cachedUrl) {
-      console.log("Cache HIT:", cachedUrl);
+      logger.success(`Cache HIT for code: ${code} -> ${cachedUrl}`);
 
       // Increment click buffer in Redis (Non-blocking write-back)
       redisClient.hIncrBy("url_clicks", code, 1).catch((err) =>
-        console.log(" Redis Click Buffering Error:", err)
+        logger.error(`Redis Click Buffering Error for code ${code}:`, err.message)
       );
 
       // Track popularity in Redis Sorted Set (ZSET)
       redisClient.zIncrBy("popular_urls", 1, code).catch((err) =>
-        console.log(" Redis ZSET Popularity Increment Error:", err)
+        logger.error(`Redis ZSET Popularity Increment Error for code ${code}:`, err.message)
       );
 
       return res.redirect(cachedUrl);
     }
 
-    console.log("Cache MISS");
+    logger.info(`Cache MISS for code: ${code}. Querying Database.`);
 
     // 2. Check DB (No write load here, pure read)
     const url = await Url.findOne({ shortCode: code });
 
     if (!url) {
-      console.log(" URL not found in DB");
+      logger.warn(`Shortcode redirect not found in DB: ${code}`);
       return res.status(404).send("Not found");
     }
 
-    console.log(" Found in DB:", url.longUrl);
+    logger.success(`Database HIT for code: ${code} -> ${url.longUrl}`);
 
     // Increment click buffer in Redis (Non-blocking write-back)
     redisClient.hIncrBy("url_clicks", code, 1).catch((err) =>
-      console.log(" Redis Click Buffering Error:", err)
+      logger.error(`Redis Click Buffering Error for code ${code}:`, err.message)
     );
 
     // Track popularity in Redis Sorted Set (ZSET)
     redisClient.zIncrBy("popular_urls", 1, code).catch((err) =>
-      console.log(" Redis ZSET Popularity Increment Error:", err)
+      logger.error(`Redis ZSET Popularity Increment Error for code ${code}:`, err.message)
     );
 
     // 3. Store in Redis Cache
     await redisClient.setEx(code, 3600, url.longUrl);
-    console.log("Stored in Redis");
+    logger.info(`Stored redirection in Redis cache for 1 hour: ${code} -> ${url.longUrl}`);
 
     res.redirect(url.longUrl);
   } catch (err) {
-    console.log(" ERROR in redirectUrl:", err);
+    logger.error(`Error in redirectUrl for code ${req.params.code}:`, err.message);
     res.status(500).json({ error: err.message });
   }
 };
@@ -111,17 +114,20 @@ export const redirectUrl = async (req, res) => {
 export const getStats = async (req, res) => {
   try {
     const { code } = req.params;
-    console.log("Fetching stats for:", code);
+    logger.info(`Fetching stats details for code: ${code}`);
 
     const url = await Url.findOne({ shortCode: code });
 
     if (!url) {
+      logger.warn(`Stats lookup failed. Code not found: ${code}`);
       return res.status(404).json({ error: "URL not found" });
     }
 
     // Combine DB clicks with any buffered clicks in Redis for 100% real-time accuracy
     const bufferedClicks = await redisClient.hGet("url_clicks", code);
     const totalClicks = url.clicks + (parseInt(bufferedClicks, 10) || 0);
+
+    logger.success(`Stats retrieved for ${code}: clicks = ${totalClicks}`);
 
     res.json({
       shortCode: url.shortCode,
@@ -131,7 +137,7 @@ export const getStats = async (req, res) => {
       createdAt: url.createdAt,
     });
   } catch (err) {
-    console.log("ERROR in getStats:", err);
+    logger.error(`Error in getStats for code ${req.params.code}:`, err.message);
     res.status(500).json({ error: err.message });
   }
 };
@@ -139,7 +145,7 @@ export const getStats = async (req, res) => {
 // GET POPULAR STATS (Top 10 URLs)
 export const getPopularStats = async (req, res) => {
   try {
-    console.log("Fetching popular URLs list...");
+    logger.info("Fetching popular links leaderboard list...");
 
     // Fetch top 10 from Redis ZSET
     let topUrls = await redisClient.zRangeWithScores("popular_urls", 0, 9, { REV: true });
@@ -147,7 +153,7 @@ export const getPopularStats = async (req, res) => {
     // Self-healing / Cache recovery:
     // If Redis ZSET is empty but we have data in MongoDB, populate ZSET from MongoDB
     if (!topUrls || topUrls.length === 0) {
-      console.log("Redis ZSET empty. Rebuilding from MongoDB...");
+      logger.warn("Redis ZSET empty. Rebuilding popular URLs ZSET from MongoDB records...");
       const dbUrls = await Url.find().sort({ clicks: -1 }).limit(10);
       
       if (dbUrls.length > 0) {
@@ -161,6 +167,7 @@ export const getPopularStats = async (req, res) => {
     }
 
     if (!topUrls || topUrls.length === 0) {
+      logger.info("No popular links found.");
       return res.json([]);
     }
 
@@ -178,9 +185,41 @@ export const getPopularStats = async (req, res) => {
       };
     });
 
+    logger.success(`Retrieved popular links leaderboard with ${result.length} items`);
     res.json(result);
   } catch (err) {
-    console.log("ERROR in getPopularStats:", err);
+    logger.error("Error in getPopularStats:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET AUTHENTICATED USER'S URLS
+export const getUserUrls = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    logger.info(`Fetching created URLs for user ID: ${userId}`);
+
+    const urls = await Url.find({ userId }).sort({ createdAt: -1 });
+
+    const result = await Promise.all(
+      urls.map(async (url) => {
+        const bufferedClicks = await redisClient.hGet("url_clicks", url.shortCode);
+        const totalClicks = url.clicks + (parseInt(bufferedClicks, 10) || 0);
+
+        return {
+          shortCode: url.shortCode,
+          longUrl: url.longUrl,
+          clicks: totalClicks,
+          topic: url.topic,
+          createdAt: url.createdAt,
+        };
+      })
+    );
+
+    logger.success(`Retrieved ${result.length} URLs for user ID: ${userId}`);
+    res.json(result);
+  } catch (err) {
+    logger.error("Error in getUserUrls:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
