@@ -11,7 +11,7 @@ const getJwtSecret = () => process.env.JWT_SECRET;
 const setTokenCookie = (res, token) => {
   res.cookie("shorten_session_token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // true in production
+    secure: false, // Set to false to allow session cookie saving over plain HTTP
     sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: "/",
@@ -197,7 +197,7 @@ export const logout = async (req, res) => {
     logger.info("Logout request received");
     res.clearCookie("shorten_session_token", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false, // Match login settings
       sameSite: "lax",
       path: "/",
     });
