@@ -59,7 +59,7 @@ services:
     container_name: frontend
     restart: always
     ports:
-      - "${FRONTEND_EXTERNAL_PORT}:3000"
+      - "${FRONTEND_EXTERNAL_PORT}:3001"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
