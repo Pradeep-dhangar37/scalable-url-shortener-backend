@@ -39,7 +39,7 @@ const startServer = async () => {
     startAnalyticsWorker();
     logger.info("Asynchronous click analytics buffer worker active");
 
-    const PORT = process.env.PORT || 3000;
+    const PORT = process.env.PORT;
     app.listen(PORT, () => {
       logger.success(`Server running on port ${PORT}`);
     });

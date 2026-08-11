@@ -16,7 +16,7 @@ export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
 
   // Base API configuration
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
   // URL Shortening States
   const [longUrl, setLongUrl] = useState("");

@@ -6,7 +6,7 @@ const RANGE_SIZE = 10000;
 
 class ZooKeeperCoordinator {
   constructor() {
-    this.client = zookeeper.createClient(process.env.ZOOKEEPER_URL || "localhost:2181");
+    this.client = zookeeper.createClient(process.env.ZOOKEEPER_URL);
     this.currentCounter = 0;
     this.maxCounter = 0;
     this.isConnected = false;

@@ -5,7 +5,7 @@ import User from "../models/User.js";
 import logger from "../utils/logger.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-const getJwtSecret = () => process.env.JWT_SECRET || "fallback_secret";
+const getJwtSecret = () => process.env.JWT_SECRET;
 
 // Helper to set HTTP-only cookie
 const setTokenCookie = (res, token) => {

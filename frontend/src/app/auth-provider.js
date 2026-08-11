@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
   // Check login status on app mount
   const checkAuth = async () => {
@@ -36,7 +36,7 @@ export function AuthProvider({ children }) {
         setUser(null);
       }
     } catch (err) {
-      console.warn("URL shortener auth service is offline or unreachable. Running in guest mode.");
+      console.error("Check Auth Error:", err);
       setUser(null);
     } finally {
       setLoading(false);
