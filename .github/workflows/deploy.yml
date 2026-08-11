@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   deploy:
@@ -11,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Deploy to AWS EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -25,13 +26,15 @@ jobs:
             mkdir -p ~/app
             cd ~/app
 
-            # If git repo is not cloned yet, clone it. Otherwise, pull changes.
+            # If git repo is not cloned yet, clone it. Otherwise, fetch and check out the active branch dynamically.
             if [ ! -d ".git" ]; then
-              git clone https://github.com/Pradeep-dhangar37/scalable-url-shortener-backend.git .
+              git clone -b ${{ github.ref_name }} https://github.com/Pradeep-dhangar37/scalable-url-shortener-backend.git .
             else
-              git pull origin main
+              git fetch origin
+              git checkout ${{ github.ref_name }}
+              git pull origin ${{ github.ref_name }}
             fi
 
             # Shut down old containers and rebuild new ones in background
-            docker-compose down
-            docker-compose up --build -d
+            docker compose down
+            docker compose up --build -d
