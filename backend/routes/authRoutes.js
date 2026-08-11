@@ -13,8 +13,8 @@ const router = express.Router();
 
 // Auth Rate Limiter configured via environment variables
 const authLimiter = rateLimiter({
-  capacity: parseInt(process.env.RATE_LIMIT_AUTH_CAPACITY || "5", 10),
-  refillRate: parseFloat(process.env.RATE_LIMIT_AUTH_REFILL_RATE || "0.1"),
+  capacity: parseInt(process.env.RATE_LIMIT_AUTH_CAPACITY, 10),
+  refillRate: parseFloat(process.env.RATE_LIMIT_AUTH_REFILL_RATE),
   limiterName: "Auth"
 });
 
