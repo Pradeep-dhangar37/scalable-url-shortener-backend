@@ -1,0 +1,37 @@
+name: CI/CD Auto Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Deploy to AWS EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            # Ensure the app directory exists
+            mkdir -p ~/app
+            cd ~/app
+
+            # If git repo is not cloned yet, clone it. Otherwise, pull changes.
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/Pradeep-dhangar37/scalable-url-shortener-backend.git .
+            else
+              git pull origin main
+            fi
+
+            # Shut down old containers and rebuild new ones in background
+            docker-compose down
+            docker-compose up --build -d
